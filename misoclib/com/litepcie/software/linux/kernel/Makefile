@@ -1,16 +1,40 @@
 # Makefile for kernel module
+MODULE := litepcie.c
+DEV_NAME := litepcie0
 
-KERNEL_VERSION:=$(shell uname -r)
-KERNEL_PATH:=/lib/modules/$(KERNEL_VERSION)/build
+# Comment/uncomment the following line to disable/enable debugging
+#DEBUG:=y
 
-obj-m = litepcie.o
-litepcie-objs = main.o
+ccflags-$(DEBUG) += -DDEBUG
+
+ifneq ($(KERNELRELEASE),)
+	obj-m := $(MODULE:.c=.o)
+else
+	KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+	PWD := $(shell pwd)
+endif
+
+KBUILDBASE =+ $(MAKE) -C $(KERNELDIR) M=$(PWD)
+
+define insmod
+$(shell $(shell echo `which insmod`) $1)
+endef
+define rmmod
+$(shell $(shell echo `which rmmod`) $1)
+endef
+
+.PHONY: rmmod clean
 
 all: litepcie.ko
 
-litepcie.ko: main.c
-	make -C $(KERNEL_PATH) M=$(PWD) modules
+litepcie.ko:
+	$(KBUILDBASE) modules
+
+insmod: litepcie.ko
+	$(call insmod, $(MOULE:.c=.ko))
+
+rmmod:
+	$(call rmmod, $(MODULE:.c=))
 
 clean:
-	make -C $(KERNEL_PATH) M=$(PWD) clean
-	rm -f *~
+	$(KBUILDBASE) clean
