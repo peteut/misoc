@@ -42,7 +42,7 @@ typedef struct {
     struct pci_dev *dev;
 
     phys_addr_t bar0_phys_addr;
-    uint8_t *bar0_addr; /* virtual address of BAR0 */
+    void __iomem *bar0_addr; /* virtual address of BAR0 */
 
     uint8_t *dma_tx_bufs[DMA_BUFFER_COUNT];
     unsigned long dma_tx_bufs_addr[DMA_BUFFER_COUNT];
@@ -579,61 +579,20 @@ static void litepcie_pci_remove(struct pci_dev *dev)
     kfree(s);
 };
 
-static const struct pci_device_id litepcie_pci_ids[] = {
+static DEFINE_PCI_DEVICE_TABLE(litepcie_pci_tbl) = {
     { PCI_DEVICE(PCI_FPGA_VENDOR_ID, PCI_FPGA_DEVICE_ID), },
-    { 0, }
+    { }
 };
-MODULE_DEVICE_TABLE(pci, litepcie_pci_ids);
+MODULE_DEVICE_TABLE(pci, litepcie_pci_tbl);
 
 
 static struct pci_driver litepcie_pci_driver = {
-	.name = LITEPCIE_NAME,
-	.id_table = litepcie_pci_ids,
+	.name = KBUILD_MODNAME,
+	.id_table = litepcie_pci_tbl,
 	.probe = litepcie_pci_probe,
 	.remove = litepcie_pci_remove,
 };
 
-static int __init litepcie_module_init(void)
-{
-    int	ret;
-
-    ret = pci_register_driver(&litepcie_pci_driver);
-    if (ret < 0) {
-        printk(KERN_ERR LITEPCIE_NAME " Error while registering PCI driver\n");
-        goto fail1;
-    }
-
-    ret = alloc_chrdev_region(&litepcie_cdev, 0, LITEPCIE_MINOR_COUNT, LITEPCIE_NAME);
-    if (ret < 0) {
-        printk(KERN_ERR LITEPCIE_NAME " Could not allocate char device\n");
-        goto fail2;
-    }
-
-    cdev_init(&litepcie_cdev_struct, &litepcie_fops);
-    ret = cdev_add(&litepcie_cdev_struct, litepcie_cdev, LITEPCIE_MINOR_COUNT);
-    if (ret < 0) {
-        printk(KERN_ERR LITEPCIE_NAME " Could not register char device\n");
-        goto fail3;
-    }
-    return 0;
- fail3:
-    unregister_chrdev_region(litepcie_cdev, LITEPCIE_MINOR_COUNT);
- fail2:
-    pci_unregister_driver(&litepcie_pci_driver);
- fail1:
-    return ret;
-}
-
-static void __exit litepcie_module_exit(void)
-{
-    cdev_del(&litepcie_cdev_struct);
-    unregister_chrdev_region(litepcie_cdev, LITEPCIE_MINOR_COUNT);
-
-    pci_unregister_driver(&litepcie_pci_driver);
-}
-
-
-module_init(litepcie_module_init);
-module_exit(litepcie_module_exit);
+module_pci_driver(litepcie_pci_driver);
 
 MODULE_LICENSE("GPL");
