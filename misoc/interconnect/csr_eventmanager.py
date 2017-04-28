@@ -123,7 +123,7 @@ class EventManager(Module, AutoCSR):
 
     def do_finalize(self):
         sources_u = [v for k, v in xdir(self, True) if isinstance(v, _EventSource)]
-        sources = sorted(sources_u, key=lambda x: x.duid)
+        sources = sorted(sources_u, key=hash)
         n = len(sources)
         self.status = CSR(n)
         self.pending = CSR(n)
