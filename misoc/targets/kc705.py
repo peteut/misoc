@@ -11,7 +11,6 @@ from misoc.cores.sdram_phy import k7ddrphy
 from misoc.cores import spi_flash
 from misoc.cores.liteeth_mini.phy import LiteEthPHY
 from misoc.cores.liteeth_mini.mac import LiteEthMAC
-from misoc.integration.soc_core import mem_decoder
 from misoc.integration.soc_sdram import *
 from misoc.integration.builder import *
 
@@ -74,21 +73,20 @@ class _CRG(Module):
 
 
 class BaseSoC(SoCSDRAM):
-    default_platform = "kc705"
-
     def __init__(self, toolchain="vivado", sdram_controller_type="minicon", **kwargs):
         platform = kc705.Platform(toolchain=toolchain)
         SoCSDRAM.__init__(self, platform,
                           clk_freq=125*1000000, cpu_reset_address=0xaf0000,
                           **kwargs)
-        self.csr_devices += ["spiflash", "ddrphy"]
 
         self.submodules.crg = _CRG(platform)
 
         self.submodules.ddrphy = k7ddrphy.K7DDRPHY(platform.request("ddram"))
+        self.config["DDRPHY_WLEVEL"] = None
         sdram_module = MT8JTF12864(self.clk_freq, "1:4")
         self.register_sdram(self.ddrphy, sdram_controller_type,
                             sdram_module.geom_settings, sdram_module.timing_settings)
+        self.csr_devices.append("ddrphy")
 
         if not self.integrated_rom_size:
             spiflash_pads = platform.request("spiflash")
@@ -99,8 +97,9 @@ class BaseSoC(SoCSDRAM):
             self.submodules.spiflash = spi_flash.SpiFlash(spiflash_pads, dummy=11, div=2)
             self.config["SPIFLASH_PAGE_SIZE"] = 256
             self.config["SPIFLASH_SECTOR_SIZE"] = 0x10000
-            self.flash_boot_address = 0xb00000
-            self.register_rom(self.spiflash.bus)
+            self.flash_boot_address = 0xb40000
+            self.register_rom(self.spiflash.bus, 16*1024*1024)
+            self.csr_devices.append("spiflash")
 
 
 class MiniSoC(BaseSoC):
@@ -120,9 +119,10 @@ class MiniSoC(BaseSoC):
                                             self.platform.request("eth"), clk_freq=self.clk_freq)
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone",
                                             nrxslots=ethmac_nrxslots, ntxslots=ethmac_ntxslots)
-        self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
+        ethmac_len = (ethmac_nrxslots + ethmac_ntxslots) * 0x800
+        self.add_wb_slave(self.mem_map["ethmac"], ethmac_len, self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base,
-                               (ethmac_nrxslots + ethmac_ntxslots) * 0x800)
+                               ethmac_len)
 
         self.crg.cd_sys.clk.attr.add("keep")
         self.ethphy.crg.cd_eth_tx.clk.attr.add("keep")

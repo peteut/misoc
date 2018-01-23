@@ -194,6 +194,14 @@ void sdrwr(char *startaddr)
 
 #ifdef CSR_DDRPHY_BASE
 
+#ifdef CONFIG_KUSDDRPHY
+#define ERR_DDRPHY_DELAY 512
+#else
+#define ERR_DDRPHY_DELAY 32
+#endif
+
+#ifdef CONFIG_DDRPHY_WLEVEL
+
 void sdrwlon(void)
 {
 	dfii_pi0_address_write(DDR3_MR1 | (1 << 7));
@@ -209,8 +217,6 @@ void sdrwloff(void)
 	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
 	ddrphy_wlevel_en_write(0);
 }
-
-#define ERR_DDRPHY_DELAY 32
 
 static int write_level(int *delay, int *high_skew)
 {
@@ -282,6 +288,8 @@ static int write_level(int *delay, int *high_skew)
 	return ok;
 }
 
+#endif /* CONFIG_DDRPHY_WLEVEL */
+
 static void read_bitslip(int *delay, int *high_skew)
 {
 	int bitslip_thr;
@@ -299,10 +307,14 @@ static void read_bitslip(int *delay, int *high_skew)
 	for(i=DFII_PIX_DATA_SIZE/2-1;i>=0;i--)
 		if(delay[i] > bitslip_thr) {
 			ddrphy_dly_sel_write(1 << i);
+#ifdef CONFIG_KUSDDRPHY
+			ddrphy_rdly_dq_bitslip_write(1);
+#else
 			/* 7-series SERDES in DDR mode needs 3 pulses for 1 bitslip */
 			ddrphy_rdly_dq_bitslip_write(1);
 			ddrphy_rdly_dq_bitslip_write(1);
 			ddrphy_rdly_dq_bitslip_write(1);
+#endif
 			printf("%d ", i);
 		}
 	printf("\n");
@@ -368,8 +380,15 @@ static void read_delays(void)
 		delay_min = delay;
 
 		/* Get a bit further into the working zone */
+#ifdef CONFIG_KUSDDRPHY
+		for(j=0;j<16;j++) {
+			delay += 1;
+			ddrphy_rdly_dq_inc_write(1);
+		}
+#else
 		delay++;
 		ddrphy_rdly_dq_inc_write(1);
+#endif
 
 		/* Find largest working delay */
 		while(1) {
@@ -413,8 +432,16 @@ int sdrlevel(void)
 	int delay[DFII_PIX_DATA_SIZE/2];
 	int high_skew[DFII_PIX_DATA_SIZE/2];
 
+#ifndef CONFIG_DDRPHY_WLEVEL
+	int i;
+	for(i=0; i<DFII_PIX_DATA_SIZE/2; i++) {
+		delay[i] = 0;
+		high_skew[i] = 0;
+	}
+#else
 	if(!write_level(delay, high_skew))
 		return 0;
+#endif
 	read_bitslip(delay, high_skew);
 	read_delays();
 

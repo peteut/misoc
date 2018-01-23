@@ -13,6 +13,7 @@ __all__ = ["misoc_software_packages", "misoc_extra_software_packages",
 
 misoc_software_packages = [
     "libcompiler-rt",
+    "libprintf",
     "libbase",
     "libnet",
     "bios"
@@ -87,8 +88,10 @@ class Builder:
     def _generate_includes(self):
         cpu_type = self.soc.cpu_type
         memory_regions = self.soc.get_memory_regions()
+        memory_groups = self.soc.get_memory_groups()
         flash_boot_address = getattr(self.soc, "flash_boot_address", None)
         csr_regions = self.soc.get_csr_regions()
+        csr_groups = self.soc.get_csr_groups()
         constants = self.soc.get_constants()
         if isinstance(self.soc, soc_sdram.SoCSDRAM) and self.soc._sdram_phy:
             sdram_phy_settings = self.soc._sdram_phy[0].settings
@@ -121,15 +124,17 @@ class Builder:
             f.write(cpu_interface.get_csr_header(csr_regions, constants))
 
         with WriteGenerated(generated_dir, "mem.rs") as f:
-            f.write(cpu_interface.get_mem_rust(memory_regions, flash_boot_address))
+            f.write(cpu_interface.get_mem_rust(memory_regions, memory_groups, flash_boot_address))
         with WriteGenerated(generated_dir, "csr.rs") as f:
-            f.write(cpu_interface.get_csr_rust(csr_regions, constants))
+            f.write(cpu_interface.get_csr_rust(csr_regions, csr_groups, constants))
         with WriteGenerated(generated_dir, "rust-cfg") as f:
             f.write(cpu_interface.get_rust_cfg(csr_regions, constants))
 
         if sdram_phy_settings is not None:
             with WriteGenerated(generated_dir, "sdram_phy.h") as f:
                 f.write(sdram_init.get_sdram_phy_header(sdram_phy_settings))
+            with WriteGenerated(generated_dir, "sdram_phy.rs") as f:
+                f.write(sdram_init.get_sdram_phy_rust(sdram_phy_settings))
 
         if self.csr_csv is not None:
             with open(self.csr_csv, "w") as f:

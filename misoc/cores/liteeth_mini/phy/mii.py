@@ -39,12 +39,12 @@ class LiteEthPHYMIIRX(Module):
         self.submodules += converter
 
         self.sync += [
-            converter.reset.eq(~pads.dv),
+            converter.reset.eq(~pads.rx_dv),
             converter.sink.stb.eq(1),
             converter.sink.data.eq(pads.rx_data)
         ]
         self.comb += [
-            converter.sink.eop.eq(~pads.dv)
+            converter.sink.eop.eq(~pads.rx_dv)
         ]
         self.comb += converter.source.connect(source)
 
@@ -55,16 +55,16 @@ class LiteEthPHYMIICRG(Module, AutoCSR):
 
         # # #
 
-        if hasattr(clock_pads, "phy"):
-            self.sync.base50 += clock_pads.phy.eq(~clock_pads.phy)
-
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
-        self.comb += self.cd_eth_rx.clk.eq(clock_pads.rx)
-        self.comb += self.cd_eth_tx.clk.eq(clock_pads.tx)
+        self.specials += [
+            Instance("BUFG", i_I=clock_pads.rx, o_O=self.cd_eth_rx.clk),
+            Instance("BUFG", i_I=clock_pads.tx, o_O=self.cd_eth_tx.clk)
+        ]
 
         reset = self._reset.storage
-        self.comb += pads.rst_n.eq(~reset)
+        if hasattr(pads, "rst_n"):
+            self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
@@ -73,7 +73,6 @@ class LiteEthPHYMIICRG(Module, AutoCSR):
 
 class LiteEthPHYMII(Module, AutoCSR):
     def __init__(self, clock_pads, pads):
-        self.dw = 8
         self.submodules.crg = LiteEthPHYMIICRG(clock_pads, pads)
         self.submodules.tx =  ClockDomainsRenamer("eth_tx")(LiteEthPHYMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_tx")(LiteEthPHYMIIRX(pads))

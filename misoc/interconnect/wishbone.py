@@ -97,7 +97,7 @@ class Decoder(Module):
     # slaves is a list of pairs:
     # 0) function that takes the address signal and returns a FHDL expression
     #    that evaluates to 1 when the slave is selected and 0 otherwise.
-    # 1) wishbone.Slave reference.
+    # 1) wishbone.Interface reference.
     # register adds flip-flops after the address comparators. Improves timing,
     # but breaks Wishbone combinatorial feedback.
     def __init__(self, master, slaves, register=False):
@@ -647,7 +647,7 @@ class SRAM(Module):
         # generate ack
         self.sync += [
             self.bus.ack.eq(0),
-            If(self.bus.cyc & self.bus.stb & ~self.bus.ack,    self.bus.ack.eq(1))
+            If(self.bus.cyc & self.bus.stb & ~self.bus.ack, self.bus.ack.eq(1))
         ]
 
 

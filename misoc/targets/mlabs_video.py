@@ -16,7 +16,6 @@ from misoc.cores import nor_flash_16
 from misoc.cores import gpio
 from misoc.cores.liteeth_mini.phy import LiteEthPHY
 from misoc.cores.liteeth_mini.mac import LiteEthMAC
-from misoc.integration.soc_core import mem_decoder
 from misoc.integration.soc_sdram import *
 from misoc.integration.builder import *
 
@@ -135,10 +134,12 @@ class MiniSoC(BaseSoC):
             self.submodules.leds = gpio.GPIOOut(Cat(platform.request("user_led", i) for i in range(2)))
             self.csr_devices += ["buttons", "leds"]
 
-        self.submodules.ethphy = LiteEthPHY(platform.request("eth_clocks"),
+        eth_clocks = platform.request("eth_clocks")
+        self.sync.base50 += eth_clocks.phy.eq(~eth_clocks.phy)
+        self.submodules.ethphy = LiteEthPHY(eth_clocks,
                                             platform.request("eth"))
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
-        self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
+        self.add_wb_slave(self.mem_map["ethmac"], 0x2000, self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
         self.csr_devices += ["ethphy", "ethmac"]
         self.interrupt_devices.append("ethmac")

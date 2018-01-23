@@ -16,7 +16,7 @@ modes = {
 }
 
 tx_pads_layout = [("tx_er", 1), ("tx_en", 1), ("tx_data", 8)]
-rx_pads_layout = [("rx_er", 1), ("dv", 1), ("rx_data", 8)]
+rx_pads_layout = [("rx_er", 1), ("rx_dv", 1), ("rx_data", 8)]
 
 
 class LiteEthPHYGMIIMIITX(Module):
@@ -63,7 +63,7 @@ class LiteEthPHYGMIIMIIRX(Module):
 
         pads_d = Record(rx_pads_layout)
         self.sync += [
-            pads_d.dv.eq(pads.dv),
+            pads_d.rx_dv.eq(pads.rx_dv),
             pads_d.rx_data.eq(pads.rx_data)
         ]
 
@@ -161,7 +161,6 @@ class LiteEthGMIIMIIModeDetection(Module, AutoCSR):
 
 class LiteEthPHYGMIIMII(Module, AutoCSR):
     def __init__(self, clock_pads, pads, clk_freq):
-        self.dw = 8
         # Note: we can use GMII CRG since it also handles tx clock pad used for MII
         self.submodules.mode_detection = LiteEthGMIIMIIModeDetection(clk_freq)
         mode = self.mode_detection.mode

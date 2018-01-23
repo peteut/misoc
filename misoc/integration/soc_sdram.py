@@ -19,7 +19,7 @@ class SoCSDRAM(SoCCore):
         if l2_size:
             self.config["L2_SIZE"] = l2_size
         self.l2_size = l2_size
-        
+
         self._sdram_phy = []
         self._cpulevel_sdram_ifs = []
         self._cpulevel_sdram_if_arbitrated = wishbone.Interface()
@@ -65,7 +65,7 @@ class SoCSDRAM(SoCCore):
         wb_sdram = wishbone.Interface()
         self.add_cpulevel_sdram_if(wb_sdram)
         self.register_mem("main_ram", self.mem_map["main_ram"],
-                          wb_sdram, main_ram_size)
+                          main_ram_size, wb_sdram)
 
         # create DFI injector
         self.submodules.dfii = dfii.DFIInjector(
@@ -84,7 +84,7 @@ class SoCSDRAM(SoCCore):
                 l2_cache = wishbone.Cache(self.l2_size//4,
                     self._cpulevel_sdram_if_arbitrated, bridge_if)
                 # XXX Vivado ->2015.1 workaround, Vivado is not able to map correctly our L2 cache.
-                # Issue is reported to Xilinx and should be fixed in next releases (2015.2?).
+                # Issue is reported to Xilinx and should be fixed in next releases (> 2017.2).
                 # Remove this workaround when fixed by Xilinx.
                 from migen.build.xilinx.vivado import XilinxVivadoToolchain
                 if isinstance(self.platform.toolchain, XilinxVivadoToolchain):
@@ -108,7 +108,7 @@ class SoCSDRAM(SoCCore):
                     self._cpulevel_sdram_if_arbitrated,
                     wishbone.Interface(bridge_if.dw))
                 # XXX Vivado ->2015.1 workaround, Vivado is not able to map correctly our L2 cache.
-                # Issue is reported to Xilinx and should be fixed in next releases (2015.2?).
+                # Issue is reported to Xilinx and should be fixed in next releases (> 2017.2).
                 # Remove this workaround when fixed by Xilinx.
                 from migen.build.xilinx.vivado import XilinxVivadoToolchain
                 if isinstance(self.platform.toolchain, XilinxVivadoToolchain):
