@@ -25,8 +25,8 @@ _layout = [
 
 class Interface(Record):
     def __init__(self, data_width=8, address_width=14):
-        Record.__init__(self, set_layout_parameters(_layout,
-            data_width=data_width, address_width=address_width))
+        super().__init__(set_layout_parameters(
+            _layout, data_width=data_width, address_width=address_width))
 
     @classmethod
     def like(self, other):
@@ -135,7 +135,7 @@ class CSRBank(csr.GenericBank):
 
         ###
 
-        csr.GenericBank.__init__(self, description, len(self.bus.dat_w))
+        super().__init__(description, len(self.bus.dat_w))
 
         sel = Signal()
         self.comb += sel.eq(self.bus.adr[9:] == address)

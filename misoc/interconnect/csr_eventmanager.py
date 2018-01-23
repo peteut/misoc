@@ -34,7 +34,7 @@ class _EventSource(DUID):
     """
 
     def __init__(self):
-        DUID.__init__(self)
+        super().__init__()
         self.status = Signal()
         self.pending = Signal()
         self.trigger = Signal()
@@ -52,7 +52,7 @@ class EventSourcePulse(Module, _EventSource):
     """
 
     def __init__(self):
-        _EventSource.__init__(self)
+        super().__init__()
         self.comb += self.status.eq(0)
         self.sync += [
             If(self.clear, self.pending.eq(0)),
@@ -67,7 +67,7 @@ class EventSourceProcess(Module, _EventSource):
     generate an interrupt on their completion.
     """
     def __init__(self):
-        _EventSource.__init__(self)
+        super().__init__()
         self.comb += self.status.eq(self.trigger)
         old_trigger = Signal()
         self.sync += [
@@ -85,7 +85,7 @@ class EventSourceLevel(Module, _EventSource):
     or more slots require CPU attention.
     """
     def __init__(self):
-        _EventSource.__init__(self)
+        super().__init__()
         self.comb += [
             self.status.eq(self.trigger),
             self.pending.eq(self.trigger)

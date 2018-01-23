@@ -22,9 +22,11 @@ class EndpointDescription:
         attributed = set()
         for f in self.payload_layout:
             if f[0] in attributed:
-                raise ValueError(f[0] + " already attributed in payload layout")
+                raise ValueError(
+                    "{[0]} already attributed in payload layout".format(f))
             if f[0] in reserved:
-                raise ValueError(f[0] + " cannot be used in endpoint layout")
+                raise ValueError(
+                    "{[0]} cannot be used in endpoint layout".format(f))
             attributed.add(f[0])
 
         full_layout = [
@@ -42,10 +44,10 @@ class Endpoint(Record):
             self.description = description_or_layout
         else:
             self.description = EndpointDescription(description_or_layout)
-        Record.__init__(self, self.description.get_full_layout())
+        super().__init__(self.description.get_full_layout())
 
     def __getattr__(self, name):
-        return getattr(object.__getattribute__(self, "payload"), name)
+        return getattr(super().__getattribute__("payload"), name)
 
 
 class _FIFOWrapper(Module):
@@ -81,15 +83,14 @@ class _FIFOWrapper(Module):
 
 class SyncFIFO(_FIFOWrapper):
     def __init__(self, layout, depth, buffered=False):
-        _FIFOWrapper.__init__(
-            self,
+        super().__init__(
             fifo.SyncFIFOBuffered if buffered else fifo.SyncFIFO,
             layout, depth)
 
 
 class AsyncFIFO(_FIFOWrapper):
     def __init__(self, layout, depth):
-        _FIFOWrapper.__init__(self, fifo.AsyncFIFO, layout, depth)
+        super().__init__(fifo.AsyncFIFO, layout, depth)
 
 
 class Multiplexer(Module):
@@ -98,7 +99,7 @@ class Multiplexer(Module):
         sinks = []
         for i in range(n):
             sink = Endpoint(layout)
-            setattr(self, "sink"+str(i), sink)
+            setattr(self, "sink{}".format(i), sink)
             sinks.append(sink)
         self.sel = Signal(max=n)
 
@@ -116,7 +117,7 @@ class Demultiplexer(Module):
         sources = []
         for i in range(n):
             source = Endpoint(layout)
-            setattr(self, "source"+str(i), source)
+            setattr(self, "source{}".format(i), source)
             sources.append(source)
         self.sel = Signal(max=n)
 

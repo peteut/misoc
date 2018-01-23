@@ -31,7 +31,7 @@ from migen.fhdl.tracer import get_obj_var_name
 
 class _CSRBase(DUID):
     def __init__(self, size, name):
-        DUID.__init__(self)
+        super().__init__()
         self.name = get_obj_var_name(name)
         if self.name is None:
             raise ValueError("Cannot extract CSR name from code, need to specify.")
@@ -46,7 +46,7 @@ class CSRConstant(DUID):
     """
 
     def __init__(self, value, bits_sign=None, name=None):
-        DUID.__init__(self)
+        super().__init__()
         self.value = Constant(value, bits_sign)
         self.name = get_obj_var_name(name)
         if self.name is None:
@@ -85,7 +85,7 @@ class CSR(_CSRBase):
     """
 
     def __init__(self, size=1, name=None):
-        _CSRBase.__init__(self, size, name)
+        super().__init__(size, name)
         self.re = Signal(name=self.name + "_re")
         self.r = Signal(self.size, name=self.name + "_r")
         self.w = Signal(self.size, name=self.name + "_w")
@@ -104,7 +104,7 @@ class CSR(_CSRBase):
 
 class _CompoundCSR(_CSRBase, Module):
     def __init__(self, size, name):
-        _CSRBase.__init__(self, size, name)
+        super().__init__(size, name)
         self.simple_csrs = []
 
     def get_simple_csrs(self):
@@ -151,7 +151,7 @@ class CSRStatus(_CompoundCSR):
     """
 
     def __init__(self, size=1, reset=0, name=None):
-        _CompoundCSR.__init__(self, size, name)
+        super().__init__(size, name)
         self.status = Signal(self.size, reset=reset)
 
     def do_finalize(self, busword):
@@ -222,7 +222,7 @@ class CSRStorage(_CompoundCSR):
     """
 
     def __init__(self, size=1, reset=0, atomic_write=False, write_from_dev=False, alignment_bits=0, name=None):
-        _CompoundCSR.__init__(self, size, name)
+        super().__init__(size, name)
         self.alignment_bits = alignment_bits
         self.storage_full = Signal(self.size, reset=reset)
         self.storage = Signal(self.size - self.alignment_bits, reset=reset >> alignment_bits)
@@ -307,7 +307,7 @@ def _make_gatherer(method, cls, prefix_cb):
                     items = getattr(v, method)()
                     prefix_cb(k + "_", items, prefixed)
                     r += items
-        return sorted(r, key=lambda x: x.duid)
+        return sorted(r, key=hash)
     return gatherer
 
 
