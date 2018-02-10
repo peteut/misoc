@@ -288,16 +288,16 @@ class CSRStorage(_CompoundCSR):
 
 def csrprefix(prefix, csrs, done):
     for csr in csrs:
-        if csr.duid not in done:
+        if hash(csr) not in done:
             csr.name = prefix + csr.name
-            done.add(csr.duid)
+            done.add(hash(csr))
 
 
 def memprefix(prefix, memories, done):
     for memory in memories:
-        if memory.duid not in done:
+        if hash(memory) not in done:
             memory.name_override = prefix + memory.name_override
-            done.add(memory.duid)
+            done.add(hash(memory))
 
 
 def _make_gatherer(method, cls, prefix_cb):
