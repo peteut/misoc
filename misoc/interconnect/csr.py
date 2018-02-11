@@ -190,7 +190,7 @@ class CSRStorage(_CompoundCSR):
         Size of the CSR register in bits.
         Can be bigger than the CSR bus width.
 
-    reset : string
+    reset : int
         Value of the register after reset.
 
     atomic_write : bool
