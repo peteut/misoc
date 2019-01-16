@@ -12,6 +12,10 @@ def get_cpu_mak(cpu):
         triple = "or1k-linux"
         cpuflags = "-mhard-mul -mhard-div -mror -mffl1 -maddc"
         clang = "1"
+    elif cpu == "vexriscv":
+        triple = "riscv64-unknown-elf"
+        cpuflags = "-D__vexriscv__ -march=rv32im  -mabi=ilp32"
+        clang = ""
     else:
         raise ValueError("Unsupported CPU type: "+cpu)
     return [
@@ -23,7 +27,10 @@ def get_cpu_mak(cpu):
 
 
 def get_linker_output_format(cpu_type):
-    return "OUTPUT_FORMAT(\"elf32-{}\")\n".format(cpu_type)
+    if cpu_type == "vexriscv":
+        return "OUTPUT_FORMAT(\"elf32-littleriscv\", \"elf32-littleriscv\", \"elf32-littleriscv\")"
+    else:
+        return "OUTPUT_FORMAT(\"elf32-{}\")\n".format(cpu_type)
 
 
 def get_linker_regions(regions):
@@ -258,6 +265,7 @@ def get_csr_rust(regions, groups, constants):
                         r += "      " + csr.name + "_write: " + member + "::"  + csr.name + "_write,\n"
                 r += "    },\n"
             r += "  ];\n\n"
+        r += "  pub const " + group_name.upper() + "_LEN: usize = " + str(len(group_members)) + ";\n\n"
 
     for name, value in constants:
         if value is None:

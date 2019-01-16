@@ -2,7 +2,7 @@
 # tCK=5ns CL=7 CWL=6
 
 from migen import *
-from migen.genlib.misc import BitSlip
+from migen.genlib.misc import BitSlip, WaitTimer
 
 from misoc.interconnect.dfi import *
 from misoc.interconnect.csr import *
@@ -16,6 +16,7 @@ class KUSDDRPHY(Module, AutoCSR):
         databits = len(pads.dq)
         nphases = 4
 
+        self._en_vtc = CSRStorage(reset=1)
         self._wlevel_en = CSRStorage()
         self._wlevel_strobe = CSR()
         self._dly_sel = CSRStorage(databits//8)
@@ -26,6 +27,7 @@ class KUSDDRPHY(Module, AutoCSR):
         self._wdly_dq_inc = CSR()
         self._wdly_dqs_rst = CSR()
         self._wdly_dqs_inc = CSR()
+        self._wdly_dqs_taps = CSRStatus(9)
 
         self.settings = sdram_settings.PhySettings(
             memtype="DDR3",
@@ -46,19 +48,27 @@ class KUSDDRPHY(Module, AutoCSR):
         # # #
 
         # Clock
-        sd_clk_se = Signal()
+        clk_o_nodelay = Signal()
+        clk_o_delayed = Signal()
         self.specials += [
             Instance("OSERDESE3",
                 p_DATA_WIDTH=8, p_INIT=0,
                 p_IS_CLK_INVERTED=0, p_IS_CLKDIV_INVERTED=0, p_IS_RST_INVERTED=0,
 
-                o_OQ=sd_clk_se,
-                i_RST=ResetSignal(),
-                i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal(),
+                o_OQ=clk_o_nodelay,
+                i_RST=ResetSignal("ic"),
+                i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal("ic"),
                 i_D=0b10101010
             ),
+            Instance("ODELAYE3",
+                p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
+                p_DELAY_FORMAT="TIME", p_DELAY_TYPE="FIXED", p_DELAY_VALUE=0,
+                i_CLK=ClockSignal("ic"),
+                i_EN_VTC=1,
+                i_ODATAIN=clk_o_nodelay, o_DATAOUT=clk_o_delayed
+            ),
             Instance("OBUFDS",
-                i_I=sd_clk_se,
+                i_I=clk_o_delayed,
                 o_O=pads.clk_p,
                 o_OB=pads.clk_n
             )
@@ -66,47 +76,75 @@ class KUSDDRPHY(Module, AutoCSR):
 
         # Addresses and commands
         for i in range(addressbits):
-            self.specials += \
+            a_o_nodelay = Signal()
+            self.specials += [
                 Instance("OSERDESE3",
                     p_DATA_WIDTH=8, p_INIT=0,
                     p_IS_CLK_INVERTED=0, p_IS_CLKDIV_INVERTED=0, p_IS_RST_INVERTED=0,
 
-                    o_OQ=pads.a[i],
-                    i_RST=ResetSignal(),
-                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal(),
+                    o_OQ=a_o_nodelay,
+                    i_RST=ResetSignal("ic"),
+                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal("ic"),
                     i_D=Cat(self.dfi.phases[0].address[i], self.dfi.phases[0].address[i],
                             self.dfi.phases[1].address[i], self.dfi.phases[1].address[i],
                             self.dfi.phases[2].address[i], self.dfi.phases[2].address[i],
                             self.dfi.phases[3].address[i], self.dfi.phases[3].address[i])
+                ),
+                Instance("ODELAYE3",
+                    p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
+                    p_DELAY_FORMAT="TIME", p_DELAY_TYPE="FIXED", p_DELAY_VALUE=0,
+                    i_CLK=ClockSignal("ic"),
+                    i_EN_VTC=1,
+                    i_ODATAIN=a_o_nodelay, o_DATAOUT=pads.a[i]
                 )
+            ]
+
         for i in range(bankbits):
-            self.specials += \
+            ba_o_nodelay = Signal()
+            self.specials += [
                 Instance("OSERDESE3",
                     p_DATA_WIDTH=8, p_INIT=0,
                     p_IS_CLK_INVERTED=0, p_IS_CLKDIV_INVERTED=0, p_IS_RST_INVERTED=0,
 
-                    o_OQ=pads.ba[i],
-                    i_RST=ResetSignal(),
-                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal(),
+                    o_OQ=ba_o_nodelay,
+                    i_RST=ResetSignal("ic"),
+                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal("ic"),
                     i_D=Cat(self.dfi.phases[0].bank[i], self.dfi.phases[0].bank[i],
                             self.dfi.phases[1].bank[i], self.dfi.phases[1].bank[i],
                             self.dfi.phases[2].bank[i], self.dfi.phases[2].bank[i],
                             self.dfi.phases[3].bank[i], self.dfi.phases[3].bank[i])
+                ),
+                Instance("ODELAYE3",
+                    p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
+                    p_DELAY_FORMAT="TIME", p_DELAY_TYPE="FIXED", p_DELAY_VALUE=0,
+                    i_CLK=ClockSignal("ic"),
+                    i_EN_VTC=1,
+                    i_ODATAIN=ba_o_nodelay, o_DATAOUT=pads.ba[i]
                 )
+            ]
         for name in "ras_n", "cas_n", "we_n", "cs_n", "cke", "odt", "reset_n":
-            self.specials += \
+            x_o_nodelay = Signal()
+            self.specials += [
                 Instance("OSERDESE3",
                     p_DATA_WIDTH=8, p_INIT=0,
                     p_IS_CLK_INVERTED=0, p_IS_CLKDIV_INVERTED=0, p_IS_RST_INVERTED=0,
 
-                    o_OQ=getattr(pads, name),
-                    i_RST=ResetSignal(),
-                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal(),
+                    o_OQ=x_o_nodelay,
+                    i_RST=ResetSignal("ic"),
+                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal("ic"),
                     i_D=Cat(getattr(self.dfi.phases[0], name), getattr(self.dfi.phases[0], name),
                             getattr(self.dfi.phases[1], name), getattr(self.dfi.phases[1], name),
                             getattr(self.dfi.phases[2], name), getattr(self.dfi.phases[2], name),
                             getattr(self.dfi.phases[3], name), getattr(self.dfi.phases[3], name))
+                ),
+                Instance("ODELAYE3",
+                    p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
+                    p_DELAY_FORMAT="TIME", p_DELAY_TYPE="FIXED", p_DELAY_VALUE=0,
+                    i_CLK=ClockSignal("ic"),
+                    i_EN_VTC=1,
+                    i_ODATAIN=x_o_nodelay, o_DATAOUT=getattr(pads, name)
                 )
+            ]
 
         # DQS and DM
         oe_dqs = Signal()
@@ -129,8 +167,8 @@ class KUSDDRPHY(Module, AutoCSR):
                     p_IS_CLK_INVERTED=0, p_IS_CLKDIV_INVERTED=0, p_IS_RST_INVERTED=0,
 
                     o_OQ=dm_o_nodelay,
-                    i_RST=ResetSignal(),
-                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal(),
+                    i_RST=ResetSignal("ic"),
+                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal("ic"),
                     i_D=Cat(self.dfi.phases[0].wrdata_mask[i], self.dfi.phases[0].wrdata_mask[databits//8+i],
                             self.dfi.phases[1].wrdata_mask[i], self.dfi.phases[1].wrdata_mask[databits//8+i],
                             self.dfi.phases[2].wrdata_mask[i], self.dfi.phases[2].wrdata_mask[databits//8+i],
@@ -140,11 +178,11 @@ class KUSDDRPHY(Module, AutoCSR):
                 Instance("ODELAYE3",
                     p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                     p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                    p_DELAY_FORMAT="COUNT", p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
+                    p_DELAY_FORMAT="TIME", p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
 
-                    i_CLK=ClockSignal(),
-                    i_INC=1, i_EN_VTC=0,
-                    i_RST=self._dly_sel.storage[i] & self._wdly_dq_rst.re,
+                    i_CLK=ClockSignal("ic"),
+                    i_INC=1, i_EN_VTC=self._en_vtc.storage,
+                    i_RST=ResetSignal("ic") | (self._dly_sel.storage[i] & self._wdly_dq_rst.re),
                     i_CE=self._dly_sel.storage[i] & self._wdly_dq_inc.re,
 
                     i_ODATAIN=dm_o_nodelay, o_DATAOUT=pads.dm[i]
@@ -153,14 +191,27 @@ class KUSDDRPHY(Module, AutoCSR):
             dqs_nodelay = Signal()
             dqs_delayed = Signal()
             dqs_t = Signal()
+            if i == 0:
+                # Store initial DQS DELAY_VALUE (in taps) to
+                # be able to reload DELAY_VALUE after reset.
+                dqs_taps = Signal(9)
+                dqs_taps_timer = WaitTimer(2**16)
+                self.submodules += dqs_taps_timer
+                dqs_taps_done = Signal()
+                self.comb += dqs_taps_timer.wait.eq(~dqs_taps_done)
+                self.sync += \
+                    If(dqs_taps_timer.done,
+                        dqs_taps_done.eq(1),
+                        self._wdly_dqs_taps.status.eq(dqs_taps)
+                    )
             self.specials += [
                 Instance("OSERDESE3",
                     p_DATA_WIDTH=8, p_INIT=0,
                     p_IS_CLK_INVERTED=0, p_IS_CLKDIV_INVERTED=0, p_IS_RST_INVERTED=0,
 
                     o_OQ=dqs_nodelay, o_T_OUT=dqs_t,
-                    i_RST=ResetSignal(),
-                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal(),
+                    i_RST=ResetSignal("ic"),
+                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal("ic"),
                     i_D=Cat(dqs_serdes_pattern[0], dqs_serdes_pattern[1],
                             dqs_serdes_pattern[2], dqs_serdes_pattern[3],
                             dqs_serdes_pattern[4], dqs_serdes_pattern[5],
@@ -170,18 +221,19 @@ class KUSDDRPHY(Module, AutoCSR):
                 Instance("ODELAYE3",
                     p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                     p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                    p_DELAY_FORMAT="COUNT", p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=64,
+                    p_DELAY_FORMAT="TIME", p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=500,
 
-                    i_CLK=ClockSignal(),
-                    i_INC=1, i_EN_VTC=0,
-                    i_RST=self._dly_sel.storage[i] & self._wdly_dqs_rst.re,
+                    i_CLK=ClockSignal("ic"),
+                    i_INC=1, i_EN_VTC=self._en_vtc.storage,
+                    i_RST=ResetSignal("ic") | (self._dly_sel.storage[i] & self._wdly_dqs_rst.re),
                     i_CE=self._dly_sel.storage[i] & self._wdly_dqs_inc.re,
+                    o_CNTVALUEOUT=Signal(9) if i != 0 else dqs_taps,
 
                     i_ODATAIN=dqs_nodelay, o_DATAOUT=dqs_delayed
                 ),
-                Instance("OBUFTDS",
+                Instance("IOBUFDSE3",
                     i_I=dqs_delayed, i_T=dqs_t,
-                    o_O=pads.dqs_p[i], o_OB=pads.dqs_n[i]
+                    io_IO=pads.dqs_p[i], io_IOB=pads.dqs_n[i]
                 )
             ]
 
@@ -209,8 +261,8 @@ class KUSDDRPHY(Module, AutoCSR):
                     p_IS_CLK_INVERTED=0, p_IS_CLKDIV_INVERTED=0, p_IS_RST_INVERTED=0,
 
                     o_OQ=dq_o_nodelay, o_T_OUT=dq_t,
-                    i_RST=ResetSignal(),
-                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal(),
+                    i_RST=ResetSignal("ic"),
+                    i_CLK=ClockSignal("sys4x"), i_CLKDIV=ClockSignal("ic"),
                     i_D=Cat(self.dfi.phases[0].wrdata[i], self.dfi.phases[0].wrdata[databits+i],
                             self.dfi.phases[1].wrdata[i], self.dfi.phases[1].wrdata[databits+i],
                             self.dfi.phases[2].wrdata[i], self.dfi.phases[2].wrdata[databits+i],
@@ -223,21 +275,21 @@ class KUSDDRPHY(Module, AutoCSR):
                     p_DATA_WIDTH=8,
 
                     i_D=dq_i_delayed,
-                    i_RST=ResetSignal(),
-                    i_FIFO_RD_CLK=0, i_FIFO_RD_EN=0,
+                    i_RST=ResetSignal("ic"),
+                    i_FIFO_RD_EN=0,
                     i_CLK=ClockSignal("sys4x"),
                     i_CLK_B=ClockSignal("sys4x"), # locally inverted
-                    i_CLKDIV=ClockSignal(),
+                    i_CLKDIV=ClockSignal("ic"),
                     o_Q=dq_bitslip.i
                 ),
                 Instance("ODELAYE3",
                     p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                     p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                    p_DELAY_FORMAT="COUNT", p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
+                    p_DELAY_FORMAT="TIME", p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
 
-                    i_CLK=ClockSignal(),
-                    i_INC=1, i_EN_VTC=0,
-                    i_RST=self._dly_sel.storage[i//8] & self._wdly_dq_rst.re,
+                    i_CLK=ClockSignal("ic"),
+                    i_INC=1, i_EN_VTC=self._en_vtc.storage,
+                    i_RST=ResetSignal("ic") | (self._dly_sel.storage[i//8] & self._wdly_dq_rst.re),
                     i_CE=self._dly_sel.storage[i//8] & self._wdly_dq_inc.re,
 
                     i_ODATAIN=dq_o_nodelay, o_DATAOUT=dq_o_delayed
@@ -245,12 +297,12 @@ class KUSDDRPHY(Module, AutoCSR):
                 Instance("IDELAYE3",
                     p_CASCADE="NONE", p_UPDATE_MODE="ASYNC",p_REFCLK_FREQUENCY=200.0,
                     p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                    p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
+                    p_DELAY_FORMAT="TIME", p_DELAY_SRC="IDATAIN",
                     p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
 
-                    i_CLK=ClockSignal(),
-                    i_INC=1, i_EN_VTC=0,
-                    i_RST=self._dly_sel.storage[i//8] & self._rdly_dq_rst.re,
+                    i_CLK=ClockSignal("ic"),
+                    i_INC=1, i_EN_VTC=self._en_vtc.storage,
+                    i_RST=ResetSignal("ic") | (self._dly_sel.storage[i//8] & self._rdly_dq_rst.re),
                     i_CE=self._dly_sel.storage[i//8] & self._rdly_dq_inc.re,
 
                     i_IDATAIN=dq_i_nodelay, o_DATAOUT=dq_i_delayed

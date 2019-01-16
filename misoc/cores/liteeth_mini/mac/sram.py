@@ -9,7 +9,6 @@ from misoc.cores.liteeth_mini.common import eth_phy_layout, eth_mtu
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2):
         self.sink = sink = stream.Endpoint(eth_phy_layout(dw))
-        self.crc_error = Signal()
 
         slotbits = max(log2_int(nslots), 1)
         lengthbits = 32
@@ -72,7 +71,6 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                     counter_ce.eq(1),
                     NextState("WRITE")
                 ).Else(
-                    NextValue(self.errors.status, self.errors.status + 1),
                     NextState("DISCARD_REMAINING")
                 )
             )
@@ -87,27 +85,26 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                 ),
                 If(sink.eop,
                     If((sink.error & sink.last_be) != 0,
-                        NextState("DISCARD")
+                        counter_reset.eq(1),
+                        NextState("IDLE")
                     ).Else(
-                        NextState("TERMINATE")
+                        NextState("COMPLETE")
                     )
                 )
             )
         )
-        fsm.act("DISCARD",
-            counter_reset.eq(1),
-            NextState("IDLE")
-        )
         fsm.act("DISCARD_REMAINING",
+            counter_reset.eq(1),
             If(sink.stb & sink.eop,
-                NextState("TERMINATE")
+                NextValue(self.errors.status, self.errors.status + 1),
+                NextState("IDLE")
             )
         )
         self.comb += [
             fifo.sink.slot.eq(slot),
             fifo.sink.length.eq(counter)
         ]
-        fsm.act("TERMINATE",
+        fsm.act("COMPLETE",
             counter_reset.eq(1),
             slot_ce.eq(1),
             fifo.sink.stb.eq(1),

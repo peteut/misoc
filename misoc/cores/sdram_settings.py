@@ -87,6 +87,21 @@ class MT48LC4M16(SDRAMModule):
     tRFC  = 66
 
 
+class MT48LC16M16(SDRAMModule):
+    memtype = "SDR"
+    # geometry
+    nbanks = 4
+    nrows  = 8192
+    ncols  = 512
+    # timings (-75 speedgrade)
+    tRP   = 20
+    tRCD  = 20
+    tWR   = 15
+    tWTR  = 2
+    tREFI = 64*1000*1000/8192
+    tRFC  = 66
+
+
 class AS4C16M16(SDRAMModule):
     memtype = "SDR"
     # geometry
@@ -238,4 +253,19 @@ class MT41J256M16(SDRAMModule):
     tWR   = 15
     tWTR  = 8
     tREFI = 64*1000*1000/8192
+    tRFC  = 260
+
+
+class MT41J512M8(SDRAMModule):
+    memtype = "DDR3"
+    # geometry
+    nbanks = 8
+    nrows  = 65536
+    ncols  = 1024
+    # timings (-125 speedgrade)
+    tRP   = 13.75
+    tRCD  = 13.75
+    tWR   = 15
+    tWTR  = 7.5
+    tREFI = 7800
     tRFC  = 260

@@ -5,6 +5,7 @@ import os
 import time
 import asyncio
 import asyncserial
+import serial
 import argparse
 
 
@@ -130,8 +131,13 @@ class Flterm:
         self.output_only = output_only
 
         self.port = asyncserial.AsyncSerial(port, baudrate=speed)
+        if serial.__version__[0] == "2":
+            self.port.ser.setRTS(False)
+        else:
+            self.port.ser.rts = False
 
-        if not (upload_only or output_only):
+    def init(self):
+        if not (self.upload_only or self.output_only):
             self.keyqueue = asyncio.Queue(100)
             def getkey_callback(c):
                 self.keyqueue.put_nowait(c)
@@ -207,23 +213,30 @@ class Flterm:
 
     async def main_coro(self):
         magic_detect_buffer = b"\x00"*len(sfl_magic_req)
+        port_reader = None
+        key_getter = None
         while True:
-            fs = [asyncio.ensure_future(self.port.read(1024))]
+            if port_reader is None:
+                port_reader = asyncio.ensure_future(self.port.read(1024))
+            fs = [port_reader]
             if not self.output_only:
-                fs += [asyncio.ensure_future(self.keyqueue.get())]
+                if key_getter is None:
+                    key_getter = asyncio.ensure_future(self.keyqueue.get())
+                fs += [key_getter]
             try:
                 done, pending = await asyncio.wait(
                     fs, return_when=asyncio.FIRST_COMPLETED)
-            except:
+            except asyncio.CancelledError:
                 for f in fs:
                     f.cancel()
+                    try:
+                        await f
+                    except asyncio.CancelledError:
+                        pass
                 raise
-            for f in pending:
-                f.cancel()
-                await asyncio.wait([f])
-
-            if fs[0] in done:
-                data = fs[0].result()
+            if port_reader in done:
+                data = port_reader.result()
+                port_reader = None
                 sys.stdout.buffer.write(data)
                 sys.stdout.flush()
 
@@ -234,8 +247,9 @@ class Flterm:
                             await self.answer_magic()
                             break
 
-            if len(fs) > 1 and fs[1] in done:
-                await self.port.write(fs[1].result())
+            if key_getter in done:
+                await self.port.write(key_getter.result())
+                key_getter = None
 
     async def upload_only_coro(self):
         magic_detect_buffer = b"\x00"*len(sfl_magic_req)
@@ -254,8 +268,12 @@ class Flterm:
         if not (self.upload_only or self.output_only):
             deinit_getkey()
         self.main_task.cancel()
-        await asyncio.wait([self.main_task])
-        self.port.close()
+        try:
+            await self.main_task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self.port.close()
 
 
 def _get_args():
@@ -278,15 +296,16 @@ def main():
         asyncio.set_event_loop(loop)
     else:
         loop = asyncio.get_event_loop()
+    args = _get_args()
+    flterm = Flterm(args.port, args.speed, args.kernel, args.kernel_addr,
+                    args.upload_only, args.output_only)
     try:
-        args = _get_args()
-        flterm = Flterm(args.port, args.speed, args.kernel, args.kernel_addr,
-                        args.upload_only, args.output_only)
-        try:
-            loop.run_until_complete(flterm.main_task)
-        finally:
-            loop.run_until_complete(flterm.close())
+        flterm.init()
+        loop.run_until_complete(flterm.main_task)
+    except KeyboardInterrupt:
+        pass
     finally:
+        loop.run_until_complete(flterm.close())
         loop.close()
 
 
